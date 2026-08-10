@@ -106,8 +106,12 @@ class DINOv3VisionEncoder(nn.Module):
         grad_context = torch.no_grad() if self.config.frozen else nullcontext()
         with grad_context:
             with autocast_context:
-                outputs = self.backbone(pixel_values=pixel_values, output_hidden_states=True)
-        tokens = outputs.hidden_states[-1] if outputs.hidden_states is not None else outputs.last_hidden_state
+                outputs = self.backbone(pixel_values=pixel_values)
+        # Use the post-layernorm output. hidden_states[-1] is the last block's
+        # output *before* DINOv3's final layernorm and is ~76x larger in
+        # magnitude (mean |x| 25.9 vs 0.34), which puts the vision tokens far
+        # outside the distribution the released checkpoints were trained on.
+        tokens = outputs.last_hidden_state
         if tokens.shape[1] == expected_patches + self.prefix_tokens:
             return tokens[:, self.prefix_tokens :, :]
         if tokens.shape[1] == expected_patches:
