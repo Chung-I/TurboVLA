@@ -24,6 +24,9 @@ export TOKENIZERS_PARALLELISM=false
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 # Keep TF quiet and CPU-only; thread caps are set inside the dataset.
 export TF_CPP_MIN_LOG_LEVEL=1
+# NCCL 2.28's RoCE/IB path segfaults on cml18 (driver 535); single-node
+# training only needs SHM/P2P anyway.
+export NCCL_IB_DISABLE=1
 
 case "$MODE" in
   smoke)
