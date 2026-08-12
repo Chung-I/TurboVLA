@@ -73,6 +73,8 @@ class DroidRLDSDataset(IterableDataset):
         tf_intra_op_threads=2,
         tf_inter_op_threads=2,
         skip_images=False,
+        stall_timeout_s=480,
+        first_batch_timeout_s=1800,
     ):
         import tensorflow as tf
 
@@ -100,6 +102,8 @@ class DroidRLDSDataset(IterableDataset):
         self.image_size = int(image_size)
         self.seed = int(seed)
         self.skip_images = bool(skip_images)
+        self.stall_timeout_s = float(stall_timeout_s)
+        self.first_batch_timeout_s = float(first_batch_timeout_s)
 
         if stats_path is not None:
             stats = load_droid_stats(stats_path, stats_key)
@@ -314,34 +318,73 @@ class DroidRLDSDataset(IterableDataset):
         return samples, instructions, states, action_chunks, masks
 
     def __iter__(self):
-        import tensorflow as tf
+        """Iterate with a liveness watchdog.
 
-        # Bind before iterating: module globals may already be torn down when
-        # the generator is finalized at interpreter shutdown.
-        op_error = tf.errors.OpError
+        TF's GCS filesystem can hang indefinitely mid-transfer (observed on
+        campus networks: connections stall, curl aborts after ~18 min, TF
+        retries into more stalled connections, and the training loop starves
+        without ever raising). A producer thread feeds a bounded queue; if no
+        batch arrives within `stall_timeout_s`, the pipeline is abandoned and
+        rebuilt with a bumped seed. Exceptions from the pipeline take the same
+        rebuild path.
+        """
+        import queue as queue_mod
+        import threading
 
         seed = self.seed + 1009 * self.rank
-        attempt = 0
         while True:
             dataset = self._build_pipeline(seed)
             iterator = dataset.as_numpy_iterator()
-            try:
-                for batch in iterator:
-                    attempt = 0
-                    yield self._to_trainer_batch(batch)
-                return  # not reachable with repeat(), kept for safety
-            except op_error as err:
-                attempt += 1
-                wait = min(60.0 * attempt, 300.0)
-                seed += 1
-                logger.warning(
-                    "DROID GCS pipeline failed (%s: %s); rebuilding with seed %d in %.0fs",
-                    type(err).__name__,
-                    err,
-                    seed,
-                    wait,
-                )
-                time.sleep(wait)
+            batches = queue_mod.Queue(maxsize=4)
+            stop = threading.Event()
+
+            def produce(iterator=iterator, batches=batches, stop=stop):
+                try:
+                    for batch in iterator:
+                        while not stop.is_set():
+                            try:
+                                batches.put(("batch", batch), timeout=5.0)
+                                break
+                            except queue_mod.Full:
+                                continue
+                        if stop.is_set():
+                            return
+                except BaseException as err:  # noqa: BLE001 - forwarded to consumer
+                    try:
+                        batches.put(("error", err), timeout=5.0)
+                    except queue_mod.Full:
+                        pass
+
+            producer = threading.Thread(target=produce, daemon=True, name=f"droid-rlds-rank{self.rank}")
+            producer.start()
+
+            timeout = self.first_batch_timeout_s
+            start = time.monotonic()
+            while True:
+                try:
+                    kind, payload = batches.get(timeout=timeout)
+                except queue_mod.Empty:
+                    logger.warning(
+                        "rank %d: no DROID batch for %.0fs (pipeline built %.0fs ago); "
+                        "abandoning stalled pipeline and rebuilding",
+                        self.rank,
+                        timeout,
+                        time.monotonic() - start,
+                    )
+                    break
+                if kind == "error":
+                    logger.warning(
+                        "rank %d: DROID pipeline raised %s: %s; rebuilding",
+                        self.rank,
+                        type(payload).__name__,
+                        payload,
+                    )
+                    break
+                timeout = self.stall_timeout_s
+                yield self._to_trainer_batch(payload)
+
+            stop.set()
+            seed += 1
 
     def __len__(self):
         return APPROX_FILTERED_SAMPLES // max(1, self.world_size)

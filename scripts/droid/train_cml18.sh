@@ -27,6 +27,14 @@ export TF_CPP_MIN_LOG_LEVEL=1
 # NCCL 2.28's RoCE/IB path segfaults on cml18 (driver 535); single-node
 # training only needs SHM/P2P anyway.
 export NCCL_IB_DISABLE=1
+# GCS reads default to 64MB blocks with no request timeout; campus network
+# stalls mid-transfer, so keep requests small and time them out fast. The
+# loader's own watchdog rebuilds the pipeline if reads stall anyway.
+export GCS_READ_CACHE_BLOCK_SIZE_MB=16
+export GCS_READ_CACHE_MAX_SIZE_MB=128
+export GCS_READ_REQUEST_TIMEOUT_SECS=120
+export GCS_REQUEST_CONNECTION_TIMEOUT_SECS=30
+export GCS_METADATA_REQUEST_TIMEOUT_SECS=60
 
 case "$MODE" in
   smoke)
@@ -40,6 +48,9 @@ case "$MODE" in
     WARMUP_STEPS=1000
     RUN_NAME="${RUN_NAME:-droid-full}"
     CKPT_DIR="$DROID_ROOT/outputs/full"
+    # Stable id so supervisor relaunches resume the same wandb run.
+    export WANDB_RUN_ID="${WANDB_RUN_ID:-droid-full-cml18}"
+    export WANDB_RESUME=allow
     ;;
   *)
     echo "unknown mode: $MODE (expected smoke|full)" >&2
