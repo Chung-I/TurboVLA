@@ -49,6 +49,14 @@ robotwin = [
   "wandb",
   "websockets==15.0.1",
 ]
+droid = [
+  "dlimp @ git+https://github.com/kvablack/dlimp@ad72ce3a9b414db2185bc0b38461d4101a65477a",
+  "msgpack>=1.0",
+  "tensorflow-cpu>=2.16",
+  "tensorflow-datasets>=4.9",
+  "wandb",
+  "websockets>=12",
+]
 dev = [
   "ruff>=0.2.2",
 ]
