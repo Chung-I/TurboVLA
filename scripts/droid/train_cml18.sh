@@ -14,6 +14,7 @@ set -euo pipefail
 
 MODE="${1:-smoke}"
 DROID_ROOT="${DROID_ROOT:-/tmp2/chungyili/droid}"
+VENV="${VENV:-/tmp2/chungyili/turbovla-droid-venv}"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0,1}"
@@ -45,7 +46,7 @@ esac
 
 mkdir -p "$CKPT_DIR"
 
-exec torchrun --nproc_per_node=2 --master_port="${MASTER_PORT:-29517}" \
+exec "$VENV/bin/torchrun" --nproc_per_node=2 --master_port="${MASTER_PORT:-29517}" \
   "$REPO_ROOT/experiments/droid/train.py" \
   --dataset_dir "gs://gresearch/robotics/droid/1.0.1" \
   --stats_path "$REPO_ROOT/experiments/droid/configs/droid_stats.json" \
