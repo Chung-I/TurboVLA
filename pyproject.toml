@@ -50,7 +50,8 @@ robotwin = [
   "websockets==15.0.1",
 ]
 droid = [
-  "dlimp @ git+https://github.com/kvablack/dlimp@ad72ce3a9b414db2185bc0b38461d4101a65477a",
+  # dlimp is also required but pins tensorflow==2.15.0 in its setup.py, so
+  # install it separately with --no-deps (see experiments/droid/README.md).
   "msgpack>=1.0",
   "tensorflow-cpu>=2.16",
   "tensorflow-datasets>=4.9",

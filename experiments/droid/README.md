@@ -21,11 +21,13 @@ policy drops into DROID-jointpos simulator evaluations (e.g. RoboLab).
 ## Setup
 
 Dependencies beyond the base package: `tensorflow-cpu`, `tensorflow-datasets`,
-`dlimp` (pinned to the same revision openpi uses), and `wandb`:
+`wandb` (the `droid` extra), plus `dlimp` pinned to the revision openpi uses.
+dlimp hard-pins `tensorflow==2.15.0`, so install it without its dependencies
+(the loader is validated on modern TF):
 
 ```bash
-pip install tensorflow-cpu tensorflow-datasets wandb \
-  "dlimp @ git+https://github.com/kvablack/dlimp@ad72ce3a9b414db2185bc0b38461d4101a65477a"
+pip install -e ".[droid]"
+pip install --no-deps "dlimp @ git+https://github.com/kvablack/dlimp@ad72ce3a9b414db2185bc0b38461d4101a65477a"
 ```
 
 Assets (default root `/tmp2/chungyili/droid`, override with `DROID_ROOT`):
