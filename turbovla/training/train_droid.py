@@ -21,11 +21,13 @@ from __future__ import annotations
 
 import argparse
 import datetime
+import faulthandler
 import functools
 import glob
 import os
 import re
 import sys
+import threading
 import time
 
 import torch
@@ -91,10 +93,37 @@ def parse_args_droid():
 
 trainer._ACTIVE_TRAIN_ARGS = None
 
+_LAST_STEP_TIME = time.monotonic()
+
+
+def _stall_stack_dumper(stale_after_s=600.0, check_every_s=60.0):
+    """Dump every thread's stack to stderr when optimizer steps stop.
+
+    The training loop can starve in places the dataloader watchdog cannot see
+    (DDP collectives, GCS-stalled TF threads). This makes any silent hang
+    self-diagnosing in the log.
+    """
+    rank = os.environ.get("RANK", "?")
+    while True:
+        time.sleep(check_every_s)
+        stale = time.monotonic() - _LAST_STEP_TIME
+        if stale > stale_after_s:
+            print(
+                f"[stall-debug rank {rank}] no optimizer step for {stale:.0f}s; "
+                "dumping all thread stacks:",
+                file=sys.stderr,
+                flush=True,
+            )
+            faulthandler.dump_traceback(file=sys.stderr)
+            sys.stderr.flush()
+            time.sleep(540.0)  # at most ~1 dump per stall window
+
 
 def parse_args_and_record():
     args = parse_args_droid()
     trainer._ACTIVE_TRAIN_ARGS = args
+
+    threading.Thread(target=_stall_stack_dumper, daemon=True, name="stall-debug").start()
 
     if int(os.environ.get("RANK", "0")) == 0 and args.wandb_mode != "disabled":
         import wandb
@@ -202,8 +231,9 @@ _WANDB_LAST_LOG_TIME = None
 
 
 def reduce_mean_with_wandb(value, device, is_distributed, world_size):
-    global _WANDB_LAST_LOG_TIME
+    global _WANDB_LAST_LOG_TIME, _LAST_STEP_TIME
     global_loss = _ORIGINAL_REDUCE_MEAN(value, device, is_distributed, world_size)
+    _LAST_STEP_TIME = time.monotonic()
     if int(os.environ.get("RANK", "0")) == 0:
         import wandb
 

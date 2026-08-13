@@ -26,6 +26,7 @@ training shim.
 
 import json
 import logging
+import sys
 import time
 
 import numpy as np
@@ -73,8 +74,8 @@ class DroidRLDSDataset(IterableDataset):
         tf_intra_op_threads=2,
         tf_inter_op_threads=2,
         skip_images=False,
-        stall_timeout_s=480,
-        first_batch_timeout_s=1800,
+        stall_timeout_s=300,
+        first_batch_timeout_s=900,
     ):
         import tensorflow as tf
 
@@ -364,20 +365,22 @@ class DroidRLDSDataset(IterableDataset):
                 try:
                     kind, payload = batches.get(timeout=timeout)
                 except queue_mod.Empty:
-                    logger.warning(
-                        "rank %d: no DROID batch for %.0fs (pipeline built %.0fs ago); "
+                    # print, not logging: must reach the log file regardless of
+                    # whatever handlers wandb/absl/TF have installed.
+                    print(
+                        f"[droid-rlds rank {self.rank}] no batch for {timeout:.0f}s "
+                        f"(pipeline built {time.monotonic() - start:.0f}s ago); "
                         "abandoning stalled pipeline and rebuilding",
-                        self.rank,
-                        timeout,
-                        time.monotonic() - start,
+                        file=sys.stderr,
+                        flush=True,
                     )
                     break
                 if kind == "error":
-                    logger.warning(
-                        "rank %d: DROID pipeline raised %s: %s; rebuilding",
-                        self.rank,
-                        type(payload).__name__,
-                        payload,
+                    print(
+                        f"[droid-rlds rank {self.rank}] pipeline raised "
+                        f"{type(payload).__name__}: {payload}; rebuilding",
+                        file=sys.stderr,
+                        flush=True,
                     )
                     break
                 timeout = self.stall_timeout_s
