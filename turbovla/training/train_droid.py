@@ -47,7 +47,10 @@ _DROID_ARG_DEFAULTS = {
     "--lr": "5e-5",
     "--min_lr_ratio": "1.0",
     "--num_workers": "0",
-    "--shuffle_buffer": "150000",
+    # 60k/rank (120k aggregate) rather than openpi's 250k: cml18 has a 1GbE
+    # NIC, and every pipeline rebuild re-pulls the whole buffer at max rate --
+    # large buffers turn each recovery into a link-saturating 10GB burst.
+    "--shuffle_buffer": "60000",
     "--text_padding_length": "32",
     "--text_layout_path": "",
     "--save_steps": "1000",
