@@ -38,8 +38,11 @@ kill_run() {
   [ -z "$pids" ] && return
   echo "$(ts) killing stalled/stuck run: $pids"
   # SIGUSR1 first: faulthandler.register(SIGUSR1) dumps every thread's stack
-  # to the log even when the process is wedged with the GIL held.
-  kill -USR1 $pids 2>/dev/null
+  # to the log even when the process is wedged with the GIL held. Workers
+  # only -- torchrun has no handler and would die mid-dump.
+  local worker_pids
+  worker_pids="$(ps -eo pid,cmd | grep "[p]ython -u .*experiments/droid/train.py" | awk '{print $1}')"
+  [ -n "$worker_pids" ] && kill -USR1 $worker_pids 2>/dev/null
   sleep 5
   kill -TERM $pids 2>/dev/null
   sleep 10
