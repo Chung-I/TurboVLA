@@ -126,6 +126,12 @@ def parse_args_and_record():
     args = parse_args_droid()
     trainer._ACTIVE_TRAIN_ARGS = args
 
+    # C-level dump on SIGUSR1: works even when the GIL is held by a hung
+    # extension call, unlike the Python-thread dumper below. The supervisor
+    # sends USR1 before killing a wedged run.
+    import signal
+
+    faulthandler.register(signal.SIGUSR1, file=sys.stderr, all_threads=True)
     threading.Thread(target=_stall_stack_dumper, daemon=True, name="stall-debug").start()
 
     if int(os.environ.get("RANK", "0")) == 0 and args.wandb_mode != "disabled":

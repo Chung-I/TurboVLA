@@ -12,11 +12,12 @@ set -u
 
 MODE="${1:-full}"
 DROID_ROOT="${DROID_ROOT:-/tmp2/chungyili/droid}"
+CKPT_ROOT="${CKPT_ROOT:-/tmp/chungyili-droid-ckpts}"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 LOG="$DROID_ROOT/logs/$MODE.log"
 STALL_MIN="${STALL_MIN:-30}"
-MAX_STEPS_FILE="$DROID_ROOT/outputs/$MODE/turbovla_droid_100000.pth"
-[ "$MODE" = smoke ] && MAX_STEPS_FILE="$DROID_ROOT/outputs/$MODE/turbovla_droid_2000.pth"
+MAX_STEPS_FILE="$CKPT_ROOT/$MODE/turbovla_droid_100000.pth"
+[ "$MODE" = smoke ] && MAX_STEPS_FILE="$CKPT_ROOT/$MODE/turbovla_droid_2000.pth"
 
 ts() { date "+%Y-%m-%d %H:%M:%S"; }
 
@@ -36,6 +37,10 @@ kill_run() {
   pids="$(train_pids)"
   [ -z "$pids" ] && return
   echo "$(ts) killing stalled/stuck run: $pids"
+  # SIGUSR1 first: faulthandler.register(SIGUSR1) dumps every thread's stack
+  # to the log even when the process is wedged with the GIL held.
+  kill -USR1 $pids 2>/dev/null
+  sleep 5
   kill -TERM $pids 2>/dev/null
   sleep 10
   pids="$(train_pids)"

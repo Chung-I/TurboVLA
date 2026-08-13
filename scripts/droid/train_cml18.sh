@@ -14,6 +14,10 @@ set -euo pipefail
 
 MODE="${1:-smoke}"
 DROID_ROOT="${DROID_ROOT:-/tmp2/chungyili/droid}"
+# Checkpoints live on the root disk: /tmp2 is a shared scratch at 100% and a
+# failed 2GB save would crash the run. /tmp is cleared on reboot, so milestone
+# checkpoints must be copied off-node as they appear.
+CKPT_ROOT="${CKPT_ROOT:-/tmp/chungyili-droid-ckpts}"
 VENV="${VENV:-/tmp2/chungyili/turbovla-droid-venv}"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
@@ -41,13 +45,13 @@ case "$MODE" in
     MAX_STEPS=2000
     WARMUP_STEPS=200
     RUN_NAME="droid-smoke-$(date +%Y%m%d-%H%M)"
-    CKPT_DIR="$DROID_ROOT/outputs/smoke"
+    CKPT_DIR="$CKPT_ROOT/smoke"
     ;;
   full)
     MAX_STEPS=100000
     WARMUP_STEPS=1000
     RUN_NAME="${RUN_NAME:-droid-full}"
-    CKPT_DIR="$DROID_ROOT/outputs/full"
+    CKPT_DIR="$CKPT_ROOT/full"
     # Stable id so supervisor relaunches resume the same wandb run.
     export WANDB_RUN_ID="${WANDB_RUN_ID:-droid-full-cml18}"
     export WANDB_RESUME=allow
